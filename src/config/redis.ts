@@ -1,23 +1,21 @@
 import { createClient } from 'redis';
-import { env } from './env';
 
-export const redis = createClient({ url: env.REDIS_URL || 'redis://localhost:6379' });
+let redis: any = null;
 
-redis.on('error', (err) => {
-  console.error('Redis Client Error:', err);
-});
+export { redis };
 
 export async function connectRedis() {
   try {
-    await redis.connect();
+    const client = createClient({ 
+      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      socket: { connectTimeout: 5000 }
+    });
+    client.on('error', () => {});
+    await client.connect();
     console.log('Redis connected');
-  } catch (err) {
+  } catch {
     console.warn('Redis not available, continuing without it');
   }
 }
 
-export async function disconnectRedis() {
-  try {
-    await redis.disconnect();
-  } catch {}
-}
+export async function disconnectRedis() {}
