@@ -1,4 +1,6 @@
 [build]
+builder = "nixpacks"
+root = "."
 command = "npm install && npx prisma generate"
 
 [deploy]
