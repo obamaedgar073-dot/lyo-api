@@ -1,7 +1,3 @@
-// ============================================================
-// LYO - Authentication Middleware
-// ============================================================
-
 import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '@/utils';
 import { prisma } from '@/config';
@@ -23,13 +19,25 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = await verifyAccessToken(token);
+    
+    let decoded;
+    try {
+      decoded = await verifyAccessToken(token);
+    } catch (jwtErr: any) {
+      console.error('JWT verify failed:', jwtErr.message);
+      throw new AppError(401, 'UNAUTHORIZED', 'Invalid token');
+    }
 
-    // Verify user still exists and is active
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.sub, status: 'active' },
-      select: { id: true, email: true, role: true, status: true },
-    });
+    let user;
+    try {
+      user = await prisma.user.findUnique({
+        where: { id: decoded.sub, status: 'active' },
+        select: { id: true, email: true, role: true, status: true },
+      });
+    } catch (dbErr: any) {
+      console.error('DB error in authenticate:', dbErr.message);
+      throw new AppError(500, 'DB_ERROR', dbErr.message);
+    }
 
     if (!user) {
       throw new AppError(401, 'UNAUTHORIZED', 'User not found or inactive');
