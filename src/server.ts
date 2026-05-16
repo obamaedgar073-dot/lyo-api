@@ -39,9 +39,16 @@ async function startServer() {
   app.use('/uploads', express.static(uploadDir));
 
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
+app.get('/debug-jwt', async (_req, res) => {
+  const { env } = await import('@/config');
+  res.json({ 
+    JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET,
+    JWT_ACCESS_EXPIRY: env.JWT_ACCESS_EXPIRY,
+  });
+});
   app.use('/api', routes);
   app.use(notFoundHandler);
   app.use(errorHandler);
