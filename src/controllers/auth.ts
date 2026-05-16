@@ -15,6 +15,7 @@ import {
   success,
   AppError,
 } from '@/utils';
+import { jwtVerify } from 'jose';
 import type { AuthRequest } from '@/middleware';
 
 export async function register(req: Request, res: Response, next: NextFunction) {
@@ -32,30 +33,14 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     const passwordHash = await hashPassword(password);
 
     const user = await prisma.user.create({
-      data: {
-        username,
-        email,
-        passwordHash,
-        displayName,
-      },
+      data: { username, email, passwordHash, displayName },
       select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        avatarUrl: true,
-        role: true,
-        isVerified: true,
-        createdAt: true,
+        id: true, username: true, email: true, displayName: true,
+        avatarUrl: true, role: true, isVerified: true, createdAt: true,
       },
     });
 
-    const accessToken = await generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
+    const accessToken = await generateAccessToken({ sub: user.id, email: user.email, role: user.role });
     const refreshToken = await generateRefreshToken(user.id);
 
     logger.info(`New user registered: ${user.email}`);
@@ -72,9 +57,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const { email, password } = req.body;
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+    const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user || !(await comparePassword(password, user.passwordHash))) {
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
@@ -84,25 +67,14 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       throw new AppError(403, 'ACCOUNT_INACTIVE', 'Account is suspended or banned');
     }
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
-    const accessToken = await generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
+    const accessToken = await generateAccessToken({ sub: user.id, email: user.email, role: user.role });
     const refreshToken = await generateRefreshToken(user.id);
 
     const { passwordHash: _, ...userWithoutPassword } = user;
 
-    res.json(
-      success({ user: userWithoutPassword, tokens: { accessToken, refreshToken } }, 'Login successful')
-    );
+    res.json(success({ user: userWithoutPassword, tokens: { accessToken, refreshToken } }, 'Login successful'));
   } catch (err) {
     next(err);
   }
@@ -118,19 +90,11 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
       select: { id: true, email: true, role: true },
     });
 
-    if (!user) {
-      throw new AppError(401, 'UNAUTHORIZED', 'User not found or inactive');
-    }
+    if (!user) throw new AppError(401, 'UNAUTHORIZED', 'User not found or inactive');
 
-    // Revoke old token and issue new one
     await revokeRefreshToken(jti);
     const newRefreshToken = await generateRefreshToken(user.id);
-
-    const accessToken = await generateAccessToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    const accessToken = await generateAccessToken({ sub: user.id, email: user.email, role: user.role });
 
     res.json(success({ accessToken, refreshToken: newRefreshToken }, 'Token refreshed'));
   } catch (err) {
@@ -145,46 +109,44 @@ export async function logout(req: AuthRequest, res: Response, next: NextFunction
       const { jti } = await verifyRefreshToken(refreshToken);
       await revokeRefreshToken(jti);
     }
-
     res.json(success(null, 'Logged out successfully'));
   } catch (err) {
     next(err);
   }
 }
 
-export async function me(req: AuthRequest, res: Response, next: NextFunction) {
+export async function me(req: Request, res: Response, next: NextFunction) {
   try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'No token' });
+
+    const secret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
+    const { payload } = await jwtVerify(token, secret, {
+      algorithms: ['HS256'],
+      audience: 'lyo-api',
+      issuer: 'lyo-auth',
+    });
+
+    console.log('me controller JWT verified:', payload.sub);
+
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
+      where: { id: payload.sub as string },
       select: {
-        id: true,
-        username: true,
-        email: true,
-        displayName: true,
-        bio: true,
-        avatarUrl: true,
-        coverUrl: true,
-        location: true,
-        website: true,
-        isVerified: true,
-        isPrivate: true,
-        role: true,
-        status: true,
-        followerCount: true,
-        followingCount: true,
-        postCount: true,
-        createdAt: true,
-        updatedAt: true,
+        id: true, username: true, email: true, displayName: true,
+        bio: true, avatarUrl: true, coverUrl: true, location: true,
+        website: true, isVerified: true, isPrivate: true, role: true,
+        status: true, followerCount: true, followingCount: true,
+        postCount: true, createdAt: true, updatedAt: true,
       },
     });
 
-    if (!user) {
-      throw new AppError(404, 'NOT_FOUND', 'User not found');
-    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
     res.json(success(user));
-  } catch (err) {
-    next(err);
+  } catch (err: any) {
+    console.error('me error:', err.message);
+    res.status(401).json({ error: err.message });
   }
 }
 
@@ -193,14 +155,9 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
     const { email } = req.body;
     const user = await prisma.user.findUnique({ where: { email } });
 
-    if (!user) {
-      // Don't reveal if email exists
-      return res.json(success(null, 'If an account exists, a reset link has been sent'));
-    }
+    if (!user) return res.json(success(null, 'If an account exists, a reset link has been sent'));
 
-    // TODO: Implement email sending with reset token
     logger.info(`Password reset requested for: ${email}`);
-
     res.json(success(null, 'If an account exists, a reset link has been sent'));
   } catch (err) {
     next(err);
