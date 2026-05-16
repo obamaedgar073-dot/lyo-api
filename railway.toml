@@ -2,6 +2,6 @@
 command = "npm install && npx prisma generate && npx prisma migrate deploy"
 
 [deploy]
-startCommand = "npx tsx src/server.ts"
+startCommand = "npx tsx --no-cache src/server.ts"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
