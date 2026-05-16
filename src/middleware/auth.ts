@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '@/utils';
 import { AppError } from '@/utils';
+import { jwtVerify } from 'jose';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -21,16 +21,23 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
     let decoded;
     try {
-      decoded = await verifyAccessToken(token);
+      const secret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
+      const { payload } = await jwtVerify(token, secret, {
+        algorithms: ['HS256'],
+        audience: 'lyo-api',
+        issuer: 'lyo-auth',
+      });
+      decoded = payload;
+      console.log('HTTP JWT verified for sub:', decoded.sub);
     } catch (jwtErr: any) {
-      console.error('JWT verify failed:', jwtErr.message);
+      console.error('HTTP JWT verify failed:', jwtErr.message);
       return res.status(401).json({ error: 'JWT failed: ' + jwtErr.message });
     }
 
     req.user = {
-      id: decoded.sub,
-      email: decoded.email,
-      role: decoded.role,
+      id: decoded.sub as string,
+      email: decoded.email as string,
+      role: decoded.role as string,
     };
 
     next();
