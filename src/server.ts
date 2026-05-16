@@ -50,6 +50,24 @@ async function startServer() {
     });
   });
 
+  app.get('/test-auth', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.json({ error: 'no header' });
+    const token = authHeader.split(' ')[1];
+    try {
+      const { jwtVerify } = await import('jose');
+      const secret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
+      const { payload } = await jwtVerify(token, secret, {
+        algorithms: ['HS256'],
+        audience: 'lyo-api',
+        issuer: 'lyo-auth',
+      });
+      res.json({ success: true, payload });
+    } catch (err: any) {
+      res.json({ error: err.message, code: err.code });
+    }
+  });
+
   app.use('/api', routes);
   app.use(notFoundHandler);
   app.use(errorHandler);
