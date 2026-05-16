@@ -1,7 +1,6 @@
 // ============================================================
 // LYO - JWT Utilities (using jose library)
 // ============================================================
-
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import { env } from '@/config';
 import { prisma } from '@/config';
@@ -37,7 +36,6 @@ export async function generateRefreshToken(userId: string): Promise<string> {
     .setIssuer('lyo-auth')
     .sign(refreshSecret);
 
-  // Store in database
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
@@ -53,13 +51,19 @@ export async function generateRefreshToken(userId: string): Promise<string> {
 }
 
 export async function verifyAccessToken(token: string): Promise<TokenPayload> {
-  const { payload } = await jwtVerify(token, accessSecret, {
-    algorithms: ['HS256'],
-    audience: 'lyo-api',
-    issuer: 'lyo-auth',
-    clockTolerance: 60,
-  });
-  return payload as TokenPayload;
+  try {
+    const { payload } = await jwtVerify(token, accessSecret, {
+      algorithms: ['HS256'],
+      audience: 'lyo-api',
+      issuer: 'lyo-auth',
+      clockTolerance: 60,
+    });
+    console.log('JWT verified successfully for sub:', payload.sub);
+    return payload as TokenPayload;
+  } catch (err: any) {
+    console.error('verifyAccessToken failed:', err.code, err.message);
+    throw err;
+  }
 }
 
 export async function verifyRefreshToken(token: string): Promise<{ userId: string; jti: string }> {
@@ -70,7 +74,6 @@ export async function verifyRefreshToken(token: string): Promise<{ userId: strin
     clockTolerance: 60,
   });
 
-  // Check if token is revoked
   const stored = await prisma.refreshToken.findUnique({
     where: { token: payload.jti as string },
   });
