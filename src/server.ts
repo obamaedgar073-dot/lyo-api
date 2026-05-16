@@ -20,9 +20,9 @@ async function startServer() {
   const httpServer = createServer(app);
 
   await connectRedis();
-
   setupWebSocket(httpServer);
 
+  app.set('trust proxy', 1);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors({ origin: env.CLIENT_URL, credentials: true }));
   app.use(generalLimiter);
@@ -39,16 +39,17 @@ async function startServer() {
   app.use('/uploads', express.static(uploadDir));
 
   app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-app.get('/debug-jwt', async (_req, res) => {
-  const { env } = await import('@/config');
-  res.json({ 
-    JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET,
-    JWT_ACCESS_EXPIRY: env.JWT_ACCESS_EXPIRY,
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
-});
+
+  app.get('/debug-jwt', async (_req, res) => {
+    const { env } = await import('@/config');
+    res.json({
+      JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET,
+      JWT_ACCESS_EXPIRY: env.JWT_ACCESS_EXPIRY,
+    });
+  });
+
   app.use('/api', routes);
   app.use(notFoundHandler);
   app.use(errorHandler);
