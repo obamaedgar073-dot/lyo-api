@@ -15,8 +15,8 @@ import {
   success,
   AppError,
 } from '@/utils';
-import { jwtVerify } from 'jose';
 import type { AuthRequest } from '@/middleware';
+import jwt from 'jsonwebtoken';
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
@@ -121,13 +121,7 @@ export async function me(req: Request, res: Response, next: NextFunction) {
     const token = authHeader?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'No token' });
 
-    const secret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
-    const { payload } = await jwtVerify(token, secret, {
-      algorithms: ['HS256'],
-      audience: 'lyo-api',
-      issuer: 'lyo-auth',
-    });
-
+    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as any;
     console.log('me controller JWT verified:', payload.sub);
 
     const user = await prisma.user.findUnique({
@@ -142,7 +136,6 @@ export async function me(req: Request, res: Response, next: NextFunction) {
     });
 
     if (!user) return res.status(404).json({ error: 'User not found' });
-
     res.json(success(user));
   } catch (err: any) {
     console.error('me error:', err.message);
