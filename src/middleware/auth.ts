@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '@/utils';
-import { prisma } from '@/config';
 import { AppError } from '@/utils';
 
 export interface AuthRequest extends Request {
@@ -28,22 +27,12 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ error: 'JWT failed: ' + jwtErr.message });
     }
 
-    let user;
-    try {
-      user = await prisma.user.findUnique({
-        where: { id: decoded.sub, status: 'active' },
-        select: { id: true, email: true, role: true, status: true },
-      });
-    } catch (dbErr: any) {
-      console.error('DB error in authenticate:', dbErr.message);
-      return res.status(500).json({ error: 'DB failed: ' + dbErr.message });
-    }
+    req.user = {
+      id: decoded.sub,
+      email: decoded.email,
+      role: decoded.role,
+    };
 
-    if (!user) {
-      return res.status(401).json({ error: 'User not found or inactive' });
-    }
-
-    req.user = user;
     next();
   } catch (err: any) {
     console.error('Unexpected auth error:', err.message);
