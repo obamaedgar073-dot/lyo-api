@@ -15,17 +15,17 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new AppError(401, 'UNAUTHORIZED', 'No token provided');
+      return res.status(401).json({ error: 'No token provided' });
     }
 
     const token = authHeader.split(' ')[1];
-    
+
     let decoded;
     try {
       decoded = await verifyAccessToken(token);
     } catch (jwtErr: any) {
       console.error('JWT verify failed:', jwtErr.message);
-      throw new AppError(401, 'UNAUTHORIZED', 'Invalid token');
+      return res.status(401).json({ error: 'JWT failed: ' + jwtErr.message });
     }
 
     let user;
@@ -36,17 +36,18 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       });
     } catch (dbErr: any) {
       console.error('DB error in authenticate:', dbErr.message);
-      throw new AppError(500, 'DB_ERROR', dbErr.message);
+      return res.status(500).json({ error: 'DB failed: ' + dbErr.message });
     }
 
     if (!user) {
-      throw new AppError(401, 'UNAUTHORIZED', 'User not found or inactive');
+      return res.status(401).json({ error: 'User not found or inactive' });
     }
 
     req.user = user;
     next();
-  } catch (err) {
-    next(err);
+  } catch (err: any) {
+    console.error('Unexpected auth error:', err.message);
+    return res.status(500).json({ error: 'Auth error: ' + err.message });
   }
 }
 
