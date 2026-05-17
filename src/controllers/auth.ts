@@ -121,8 +121,17 @@ export async function me(req: Request, res: Response, next: NextFunction) {
     const token = authHeader?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'No token' });
 
-    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as any;
-    console.log('me controller JWT verified:', payload.sub);
+    const secret = process.env.JWT_ACCESS_SECRET!;
+    console.log('Secret length:', secret?.length, 'Token length:', token.length);
+
+    let payload: any;
+    try {
+      payload = jwt.verify(token, secret, { algorithms: ['HS256'] }) as any;
+      console.log('me controller JWT verified:', payload.sub);
+    } catch (jwtErr: any) {
+      console.error('me jwt error:', jwtErr.message);
+      return res.status(401).json({ error: jwtErr.message });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: payload.sub as string },
